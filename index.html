@@ -82,7 +82,6 @@
         <h2 style="justify-content: center;">منصة الأستاذ تامر</h2>
         <p style="color: var(--text-light); margin-bottom: 25px; font-size: 14px;">بوابة الإدارة</p>
         
-        <!-- استخدام autocomplete="off" لمنع الاقتراحات -->
         <div class="input-group">
             <label><i class="fa-solid fa-user" style="margin-left: 5px;"></i> اسم المستخدم</label>
             <input type="text" id="adminUser" placeholder="أدخل اسم المستخدم" autocomplete="off">
@@ -95,11 +94,11 @@
         <div id="loginErrorMsg" class="msg error"><i class="fa-solid fa-circle-exclamation"></i> البيانات غير صحيحة!</div>
     </div>
 
-    <!-- لوحة التحكم (مخفية كافتراضي) -->
+    <!-- لوحة التحكم -->
     <div class="card admin-card" id="adminDashboard" style="display: none;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; flex-wrap:wrap; gap:10px;">
             <h2 style="margin:0;"><i class="fa-solid fa-graduation-cap"></i> منصة حصص الأستاذ تامر متولي</h2>
-            <button onclick="location.reload()" style="width:auto; padding:8px 15px; font-size:13px; background:#f1f5f9; color:var(--danger); border:1px solid #e2e8f0;"><i class="fa-solid fa-right-from-bracket"></i> خروج</button>
+            <button id="logoutBtn" style="width:auto; padding:8px 15px; font-size:13px; background:#f1f5f9; color:var(--danger); border:1px solid #e2e8f0;"><i class="fa-solid fa-right-from-bracket"></i> خروج من الحساب</button>
         </div>
 
         <div class="tabs-nav no-print">
@@ -229,16 +228,34 @@
 
         document.addEventListener('click', (e) => { if (e.target.closest('button, .tab-btn, select')) { playSoftClick(); } });
 
-        // نظام تسجيل الدخول البسيط
+        // ضبط تاريخ اليوم تلقائياً عند تحميل الصفحة
+        document.addEventListener('DOMContentLoaded', () => {
+            const today = new Date();
+            const yyyy = today.getFullYear();
+            const mm = String(today.getMonth() + 1).padStart(2, '0');
+            const dd = String(today.getDate()).padStart(2, '0');
+            document.getElementById('attDate').value = `${yyyy}-${mm}-${dd}`;
+            
+            // التحقق من حالة تسجيل الدخول المحفوظة
+            if (localStorage.getItem('tamerLoggedIn') === 'true') {
+                document.getElementById('loginSection').style.display = 'none';
+                document.getElementById('adminDashboard').style.display = 'block';
+                loadAdminData();
+                loadGlobalFinancialStats();
+            }
+        });
+
+        // نظام تسجيل الدخول مع الحفظ
         document.getElementById('loginBtn').addEventListener('click', () => {
-            const user = document.getElementById('adminUser').value;
-            const pass = document.getElementById('adminPass').value;
+            const user = document.getElementById('adminUser').value.trim();
+            const pass = document.getElementById('adminPass').value.trim();
             const btn = document.getElementById('loginBtn');
             btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> جاري التحقق...';
             
             setTimeout(() => {
                 if (user === 'tamer' && pass === '246246') {
                     playLoginSuccess();
+                    localStorage.setItem('tamerLoggedIn', 'true'); // حفظ الدخول
                     document.getElementById('loginSection').style.display = 'none';
                     document.getElementById('adminDashboard').style.display = 'block';
                     loadAdminData();
@@ -251,7 +268,12 @@
             }, 500);
         });
 
-        // دوال المنصة الأساسية (تعمل فقط بعد تسجيل الدخول)
+        // تسجيل الخروج
+        document.getElementById('logoutBtn').addEventListener('click', () => {
+            localStorage.removeItem('tamerLoggedIn');
+            location.reload();
+        });
+
         window.openTab = function(tabId) { 
             document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active')); 
             document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active')); 
@@ -291,6 +313,7 @@
             }
         };
 
+        // تم إضافة طباعة وتوضيح نوع الخطأ لحل مشكلة التعليق على جاري الحفظ
         document.getElementById('addStudentBtn').addEventListener('click', async () => {
             const name = document.getElementById('studentName').value, 
                   code = document.getElementById('studentCode').value, 
@@ -309,26 +332,35 @@
                     showMsg('addStudentMsg');
                 }
                 resetAddForm(); loadAdminData(); loadGlobalFinancialStats(); if(isEditing) openTab('tab-list');
-            } catch (error) { alert("حدث خطأ. تأكد من اتصالك بالإنترنت."); } finally { btn.innerHTML = originalText; }
+            } catch (error) { 
+                console.error("Firebase Error: ", error);
+                alert("تعذر الحفظ! يرجى التأكد من تعديل قواعد الحماية (Rules) في Firebase إلى true كما هو موضح.\nتفاصيل الخطأ: " + error.message);
+            } finally { 
+                btn.innerHTML = originalText; 
+            }
         });
 
         async function loadAdminData() {
-            const selects = document.querySelectorAll('.student-select');
-            const dataTableBody = document.getElementById('studentsDataTableBody'); 
-            
-            const qSnap = await getDocs(collection(db, "students"));
-            
-            let optionsHTML = '<option value="">اختر الطالب...</option>';
-            let tableHTML = '';
+            try {
+                const selects = document.querySelectorAll('.student-select');
+                const dataTableBody = document.getElementById('studentsDataTableBody'); 
+                
+                const qSnap = await getDocs(collection(db, "students"));
+                
+                let optionsHTML = '<option value="">اختر الطالب...</option>';
+                let tableHTML = '';
 
-            qSnap.forEach((docSnap) => {
-                const data = docSnap.data();
-                optionsHTML += `<option value="${data.code}">${data.name}</option>`;
-                tableHTML += `<tr><td><strong>${data.name}</strong></td><td><code>${data.code}</code></td><td>${data.price} ر.س</td><td><button class="btn-secondary" style="padding:6px 12px; margin:0; width:auto; font-size:12px;" onclick="editStudentUI('${data.code}')"><i class="fa-solid fa-pen"></i> تعديل</button></td></tr>`;
-            });
+                qSnap.forEach((docSnap) => {
+                    const data = docSnap.data();
+                    optionsHTML += `<option value="${data.code}">${data.name}</option>`;
+                    tableHTML += `<tr><td><strong>${data.name}</strong></td><td><code>${data.code}</code></td><td>${data.price} ر.س</td><td><button class="btn-secondary" style="padding:6px 12px; margin:0; width:auto; font-size:12px;" onclick="editStudentUI('${data.code}')"><i class="fa-solid fa-pen"></i> تعديل</button></td></tr>`;
+                });
 
-            selects.forEach(s => s.innerHTML = optionsHTML);
-            dataTableBody.innerHTML = tableHTML;
+                selects.forEach(s => s.innerHTML = optionsHTML);
+                dataTableBody.innerHTML = tableHTML;
+            } catch(e) {
+                console.error("Error loading data: ", e);
+            }
         }
 
         window.loadGlobalFinancialStats = async function() {
@@ -352,8 +384,14 @@
             const code = document.getElementById('attStudentSelect').value, date = document.getElementById('attDate').value, status = document.getElementById('attStatus').value, report = document.getElementById('attReport').value, sessionPrice = document.getElementById('attSessionPrice').value;
             if(!code || !date) return alert("الرجاء اختيار الطالب والتاريخ!");
             const btn = document.getElementById('addAttendanceBtn'); btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> جاري الحفظ...';
-            await addDoc(collection(db, "attendance"), { studentCode: code, date, status, report, isPaid: false, sessionPrice: Number(sessionPrice) || 0 });
-            showMsg('addAttendanceMsg'); document.getElementById('attReport').value = ''; btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> حفظ السجل'; loadGlobalFinancialStats();
+            try {
+                await addDoc(collection(db, "attendance"), { studentCode: code, date, status, report, isPaid: false, sessionPrice: Number(sessionPrice) || 0 });
+                showMsg('addAttendanceMsg'); document.getElementById('attReport').value = ''; loadGlobalFinancialStats();
+            } catch(error) {
+                alert("حدث خطأ في التسجيل: " + error.message);
+            } finally {
+                btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> حفظ السجل'; 
+            }
         });
 
         document.getElementById('fetchDuesBtn').addEventListener('click', async () => {
@@ -388,16 +426,20 @@
             currentViewingStudentCode = e.target.value; if(!currentViewingStudentCode) { document.getElementById('studentDetailsSection').style.display = 'none'; return; }
             document.getElementById('studentDetailsSection').style.display = 'block'; const activeList = document.getElementById('activeRecordsList'); const archivedList = document.getElementById('archivedRecordsList');
             activeList.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> جاري التحميل...'; archivedList.innerHTML = '';
-            const qSnap = await getDocs(query(collection(db, "attendance"), where("studentCode", "==", currentViewingStudentCode)));
-            
-            let activeHTML = '', archivedHTML = '';
-            qSnap.forEach((docSnap) => {
-                const data = docSnap.data(), safeReport = data.report ? data.report.replace(/'/g, "\\'").replace(/"/g, '&quot;') : ''; const statusBadge = data.status === 'حاضر' ? '<span class="badge badge-status-present">حاضر</span>' : '<span class="badge badge-status-absent">غائب</span>';
-                let html = `<div class="record-card" id="record-${docSnap.id}"><div class="record-details"><i class="fa-regular fa-calendar-check" style="color:var(--primary); margin-left:5px;"></i> <strong>التاريخ:</strong> ${formatDateAr(data.date)} <br><strong>الحالة:</strong> ${statusBadge} | <strong>السعر:</strong> ${data.sessionPrice||0} ر.س <br><strong>ملاحظات:</strong> <span style="color:var(--text-light);">${data.report||'لا يوجد'}</span></div><div style="display:flex; flex-direction:column; gap:8px;"><button class="btn-secondary" style="width:auto; padding:6px 12px; margin:0; font-size:12px;" onclick="editRecordUI('${docSnap.id}', '${data.date}', '${data.status}', ${data.sessionPrice||0}, '${safeReport}')"><i class="fa-solid fa-pen"></i> تعديل</button><button class="btn-danger" style="width:auto; padding:6px 12px; margin:0; font-size:12px;" onclick="deleteRecord('${docSnap.id}')"><i class="fa-solid fa-trash"></i> حذف</button></div></div>`;
-                if(data.isPaid) archivedHTML += html; else activeHTML += html;
-            });
-            activeList.innerHTML = activeHTML || '<p style="color:var(--text-light);"><i class="fa-solid fa-folder-open"></i> لا توجد سجلات حالية.</p>';
-            archivedList.innerHTML = archivedHTML || '<p style="color:var(--text-light);"><i class="fa-solid fa-folder-open"></i> لا توجد سجلات مؤرشفة.</p>';
+            try {
+                const qSnap = await getDocs(query(collection(db, "attendance"), where("studentCode", "==", currentViewingStudentCode)));
+                
+                let activeHTML = '', archivedHTML = '';
+                qSnap.forEach((docSnap) => {
+                    const data = docSnap.data(), safeReport = data.report ? data.report.replace(/'/g, "\\'").replace(/"/g, '&quot;') : ''; const statusBadge = data.status === 'حاضر' ? '<span class="badge badge-status-present">حاضر</span>' : '<span class="badge badge-status-absent">غائب</span>';
+                    let html = `<div class="record-card" id="record-${docSnap.id}"><div class="record-details"><i class="fa-regular fa-calendar-check" style="color:var(--primary); margin-left:5px;"></i> <strong>التاريخ:</strong> ${formatDateAr(data.date)} <br><strong>الحالة:</strong> ${statusBadge} | <strong>السعر:</strong> ${data.sessionPrice||0} ر.س <br><strong>ملاحظات:</strong> <span style="color:var(--text-light);">${data.report||'لا يوجد'}</span></div><div style="display:flex; flex-direction:column; gap:8px;"><button class="btn-secondary" style="width:auto; padding:6px 12px; margin:0; font-size:12px;" onclick="editRecordUI('${docSnap.id}', '${data.date}', '${data.status}', ${data.sessionPrice||0}, '${safeReport}')"><i class="fa-solid fa-pen"></i> تعديل</button><button class="btn-danger" style="width:auto; padding:6px 12px; margin:0; font-size:12px;" onclick="deleteRecord('${docSnap.id}')"><i class="fa-solid fa-trash"></i> حذف</button></div></div>`;
+                    if(data.isPaid) archivedHTML += html; else activeHTML += html;
+                });
+                activeList.innerHTML = activeHTML || '<p style="color:var(--text-light);"><i class="fa-solid fa-folder-open"></i> لا توجد سجلات حالية.</p>';
+                archivedList.innerHTML = archivedHTML || '<p style="color:var(--text-light);"><i class="fa-solid fa-folder-open"></i> لا توجد سجلات مؤرشفة.</p>';
+            } catch(e) {
+                console.error(e);
+            }
         });
 
         window.editRecordUI = function(id, date, status, price, report) { document.getElementById(`record-${id}`).innerHTML = `<div style="width: 100%; display: flex; flex-direction: column; gap: 12px; background: #f8fafc; padding: 15px; border-radius: 10px; border: 1px dashed #cbd5e1;"><h4 style="margin:0; border:none; color:var(--primary);"><i class="fa-solid fa-pen-to-square"></i> تعديل السجل</h4><div style="display:flex; gap:10px; flex-wrap:wrap;"><div style="flex:1;"><label style="font-size:12px; font-weight:bold;">التاريخ:</label><input type="date" id="edit-date-${id}" value="${date}" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px;"></div><div style="flex:1;"><label style="font-size:12px; font-weight:bold;">الحالة:</label><select id="edit-status-${id}" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px;"><option value="حاضر" ${status==='حاضر'?'selected':''}>حاضر</option><option value="غائب" ${status==='غائب'?'selected':''}>غائب</option></select></div><div style="flex:1;"><label style="font-size:12px; font-weight:bold;">السعر:</label><input type="number" id="edit-price-${id}" value="${price}" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px;"></div></div><div><label style="font-size:12px; font-weight:bold;">الملاحظات:</label><textarea id="edit-report-${id}" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px;">${report}</textarea></div><div style="display:flex; gap:10px; margin-top:5px;"><button class="btn-success" onclick="saveRecordEdit('${id}')" style="margin:0; padding:10px;"><i class="fa-solid fa-check"></i> حفظ</button><button class="btn-secondary" onclick="document.getElementById('manageStudentSelect').dispatchEvent(new Event('change'))" style="margin:0; padding:10px;"><i class="fa-solid fa-xmark"></i> إلغاء</button></div></div>`; };
@@ -407,6 +449,4 @@
 
     </script>
 </body>
-</html>
-
 </html>
